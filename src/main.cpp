@@ -161,7 +161,7 @@ int main(int argc, char ** argv) {
 	}
 	
 	osmpbf::PbiStream pbi(cfg.fileNames);
-	osmpbf::parseFileCPPThreads(pbi, Worker(&cfg, &state), cfg.threadCount, 5, true);
+	osmpbf::parseFileCPPThreads(pbi, Worker(&cfg, &state), cfg.threadCount, 1, true);
 	for(Tile const & t : state.tiles) {
 		std::cout << t.d.x << ' ' << t.d.y << ' ' << t.d.z << '\n';
 	}
