@@ -12,6 +12,7 @@ struct Config final {
 public:
 	std::vector<std::string> fileNames;
 	std::vector<uint8_t> zoomLevels;
+	uint32_t threadCount{1};
 public:
 	Config() {}
 	~Config() {}
@@ -20,18 +21,18 @@ public:
 };
 
 
-struct LatDeg {
+struct LatDeg final {
 	LatDeg(double v) : v(v) {}
 	double v;
 };
 
-struct LatRad {
+struct LatRad final {
 	double v;
 	LatRad(double v) : v(v) {}
 	LatRad(LatDeg const & v) : v(v.v/180.0*M_PI) {}
 };
 
-struct LonDeg {
+struct LonDeg final {
 	LonDeg(double v) : v(v) {}
 	double v;
 };
@@ -66,8 +67,37 @@ namespace std {
 	};
 }
 
-struct State {
+struct State final {
+	std::mutex lock;
 	std::unordered_set<Tile> tiles;
+};
+
+struct Worker final {
+	Config * cfg;
+	State * state;
+	std::unordered_set<Tile> tiles;
+	void operator()(osmpbf::PrimitiveBlockInputAdaptor & pbi) {
+		if (!pbi.nodesSize()) {
+			return;
+		}
+		for(auto z : cfg->zoomLevels) {
+			for(osmpbf::INodeStream node(pbi.getNodeStream()); !node.isNull(); node.next()) {
+				tiles.emplace(z, LatDeg(node.latd()), LonDeg(node.lond()));
+			}
+		}
+	}
+	Worker(Config * cfg, State * state) : cfg(cfg), state(state) {}
+	Worker(Worker const & other) : cfg(other.cfg), state(other.state) {}
+	~Worker() {
+		std::lock_guard<std::mutex> lck(state->lock);
+		if (state->tiles.size()) {
+			state->tiles.insert(tiles.begin(), tiles.end());
+		}
+		else {
+			std::swap(state->tiles, tiles);
+		}
+	}
+	
 };
 
 int Config::parse(int argc, char ** argv) {
@@ -101,10 +131,15 @@ int Config::parse(int argc, char ** argv) {
 				}
 			}
 		}
+		else if (("-t" == token || "--threads" == token) && i+1 < argc) {
+			threadCount = ::atoi(argv[i+1]);
+			i += 2;
+		}
 		else if ("-h" == token || "--help" == token) {
 			return -1;
 		}
 		else {
+			std::cerr << "Invalid option: " << token << std::endl;
 			return -1;
 		}
 	}
@@ -114,6 +149,7 @@ int Config::parse(int argc, char ** argv) {
 void Config::help(std::ostream & out) {
 	out << "prg -f filenames  -z zoomlevels";
 }
+
 
 int main(int argc, char ** argv) {
 	Config cfg;
@@ -125,14 +161,7 @@ int main(int argc, char ** argv) {
 	}
 	
 	osmpbf::PbiStream pbi(cfg.fileNames);
-	for(auto z: cfg.zoomLevels) {
-		osmpbf::parseFile(pbi, [&](osmpbf::PrimitiveBlockInputAdaptor & pbi){
-			for(osmpbf::INodeStream node(pbi.getNodeStream()); !node.isNull(); node.next()) {
-				state.tiles.emplace(z, LatDeg(node.latd()), LonDeg(node.lond()));
-			}
-		});
-		pbi.reset();
-	}
+	osmpbf::parseFileCPPThreads(pbi, Worker(&cfg, &state), cfg.threadCount, 5, true);
 	for(Tile const & t : state.tiles) {
 		std::cout << t.d.x << ' ' << t.d.y << ' ' << t.d.z << '\n';
 	}
