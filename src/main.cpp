@@ -36,11 +36,11 @@ struct LonDeg {
 	double v;
 };
 
-union Tile {
-	struct Data {
-		uint64_t z:4;
-		uint64_t x:30;
-		uint64_t y:30;
+union Tile final {
+	struct Data final {
+		uint64_t z:6;
+		uint64_t x:29;
+		uint64_t y:29;
 	} d;
 	uint64_t raw;
 	Tile(uint64_t raw) : raw(raw) {}
