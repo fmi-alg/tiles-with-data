@@ -8,18 +8,38 @@
 #include <osmpbf/osmfilein.h>
 #include <osmpbf/inode.h>
 
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#if defined(__linux__)
+#  if defined(__ANDROID__)
+#    include <sys/endian.h>
+#    ifndef le64toh
+#      define le64toh(x) letoh64(x)
+#    endif
+#  else
+#    include <endian.h>
+#  endif
+#elif defined(__FreeBSD__) || defined(__NetBSD__)
+#  include <sys/endian.h>
+#elif defined(__OpenBSD__)
+#  include <sys/types.h>
+#else
+#  include <arpa/inet.h>
+#endif
+
 struct Config final {
 public:
 	std::vector<std::string> fileNames;
 	std::vector<uint8_t> zoomLevels;
 	uint32_t threadCount{1};
+	bool binaryOutput{false};
 public:
 	Config() {}
 	~Config() {}
 	int parse(int argc, char ** argv);
 	void help(std::ostream &);
 };
-
 
 struct LatDeg final {
 	LatDeg(double v) : v(v) {}
@@ -70,6 +90,10 @@ namespace std {
 struct State final {
 	std::mutex lock;
 	std::unordered_set<Tile> tiles;
+	
+	//stats
+	std::size_t dataSize;
+	std::atomic<uint64_t> parsedDataSize{0};
 };
 
 struct Worker final {
@@ -135,6 +159,10 @@ int Config::parse(int argc, char ** argv) {
 			threadCount = ::atoi(argv[i+1]);
 			i += 2;
 		}
+		else if ("-b" == token || "--binary" == token) {
+			binaryOutput = true;
+			++i;
+		}
 		else if ("-h" == token || "--help" == token) {
 			return -1;
 		}
@@ -147,9 +175,11 @@ int Config::parse(int argc, char ** argv) {
 }
 
 void Config::help(std::ostream & out) {
-	out << "prg -f filenames  -z zoomlevels";
+	out <<
+		"prg -f filenames  -z zoomlevels --binary\n"
+		"Binary format is uint64_t in little endian with\n"
+		"uint64_t v = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x))";
 }
-
 
 int main(int argc, char ** argv) {
 	Config cfg;
@@ -162,8 +192,20 @@ int main(int argc, char ** argv) {
 	
 	osmpbf::PbiStream pbi(cfg.fileNames);
 	osmpbf::parseFileCPPThreads(pbi, Worker(&cfg, &state), cfg.threadCount, 1, true);
-	for(Tile const & t : state.tiles) {
-		std::cout << t.d.x << ' ' << t.d.y << ' ' << t.d.z << '\n';
+	if (cfg.binaryOutput) {
+		for(Tile const & t : state.tiles) {
+			static_assert(sizeof(uint8_t) == 1 && sizeof(uint64_t) == 8);
+			uint64_t d = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x));
+			d = htole64(d);
+			char tmp[8];
+			::memcpy(tmp, &d, 8);
+			std::cout.write(tmp, 8);
+		}
+	}
+	else {
+		for(Tile const & t : state.tiles) {
+			std::cout << t.d.x << ' ' << t.d.y << ' ' << t.d.z << '\n';
+		}
 	}
 	return 0;
 }
