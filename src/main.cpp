@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <unordered_set>
+#include <unordered_map>
 #include <osmpbf/parsehelpers.h>
 #include <osmpbf/pbistream.h>
 #include <osmpbf/osmfilein.h>
@@ -34,6 +35,7 @@ public:
 	std::vector<uint8_t> zoomLevels;
 	uint32_t threadCount{1};
 	bool binaryOutput{false};
+	bool count{false};
 public:
 	Config() {}
 	~Config() {}
@@ -163,6 +165,10 @@ int Config::parse(int argc, char ** argv) {
 			binaryOutput = true;
 			++i;
 		}
+		else if ("--count" == token) {
+			count = true;
+			++i;
+		}
 		else if ("-h" == token || "--help" == token) {
 			return -1;
 		}
@@ -176,10 +182,10 @@ int Config::parse(int argc, char ** argv) {
 
 void Config::help(std::ostream & out) {
 	out <<
-		"tiles-with-data -f filenames  -z zoomlevels --binary\n"
+		"tiles-with-data -f filenames  -z zoomlevels [--binary] [--count]\n"
 		"Binary format is uint64_t in little endian with\n"
 		"uint64_t v = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x))\n"
-		"List all tiles in zoom levels 10 to 14 with data using 8 threads:"
+		"List all tiles in zoom levels 10 to 14 with data using 8 threads:\n"
 		"tiles-with-data -f planet.osm.ppbf -z 10 11 12 13 14 -t 8 > tiles.txt";
 }
 
@@ -194,7 +200,16 @@ int main(int argc, char ** argv) {
 	
 	osmpbf::PbiStream pbi(cfg.fileNames);
 	osmpbf::parseFileCPPThreads(pbi, Worker(&cfg, &state), cfg.threadCount, 1, true);
-	if (cfg.binaryOutput) {
+	if (cfg.count) {
+		std::unordered_map<std::size_t, std::size_t> counts;
+		for(Tile const & t : state.tiles) {
+			counts[t.d.z] += 1;
+		}
+		for(auto const & [zoom, count] : counts) {
+			std::cout << zoom << ": " << count << std::endl;
+		}
+	}
+	else if (cfg.binaryOutput) {
 		for(Tile const & t : state.tiles) {
 			static_assert(sizeof(uint8_t) == 1 && sizeof(uint64_t) == 8);
 			uint64_t d = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x));
