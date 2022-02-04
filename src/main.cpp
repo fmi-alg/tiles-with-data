@@ -186,7 +186,7 @@ void Config::help(std::ostream & out) {
 int main(int argc, char ** argv) {
 	Config cfg;
 	State state;
-	if (cfg.parse(argc, argv) < 0) {
+	if (cfg.parse(argc, argv) < 0 || !cfg.fileNames.size() || !cfg.zoomLevels.size()) {
 		cfg.help(std::cout);
 		std::cout << std::endl;
 		return -1;
