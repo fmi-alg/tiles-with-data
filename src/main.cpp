@@ -176,9 +176,11 @@ int Config::parse(int argc, char ** argv) {
 
 void Config::help(std::ostream & out) {
 	out <<
-		"prg -f filenames  -z zoomlevels --binary\n"
+		"tiles-with-data -f filenames  -z zoomlevels --binary\n"
 		"Binary format is uint64_t in little endian with\n"
-		"uint64_t v = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x))";
+		"uint64_t v = (uint64_t(t.d.z) << 58) | (uint64_t(t.d.y) << 29) | (uint64_t(t.d.x))\n"
+		"List all tiles in zoom levels 10 to 14 with data using 8 threads:"
+		"tiles-with-data -f planet.osm.ppbf -z 10 11 12 13 14 -t 8 > tiles.txt";
 }
 
 int main(int argc, char ** argv) {
