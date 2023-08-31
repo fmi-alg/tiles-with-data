@@ -1,6 +1,4 @@
 cmake_minimum_required(VERSION 3.9)
-set(CMAKE_CXX_COMPILER "/usr/bin/g++")
-set(CMAKE_C_COMPILER "/usr/bin/gcc")
 project (tiles-with-data)
 
 add_subdirectory(vendor/osmpbf osmpbf)
